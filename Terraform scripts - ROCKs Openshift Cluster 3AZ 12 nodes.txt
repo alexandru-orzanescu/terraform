@@ -1,0 +1,174 @@
+Q: teraform script for an Openshift Cluster in IBM Cloud with 3 availability zones, having 12 ROCKs nodes.
+
+R: 
+# To create an OpenShift cluster in IBM Cloud with 3 availability zones and 12 ROCKs nodes using Terraform, follow these steps:
+
+1. Install the IBM Cloud Terraform provider and create a Terraform configuration file (main.tf). 
+Refer to the official documentation for installation instructions:
+ https://cloud.ibm.com/docs/terraform?topic=terraform-getting-started
+
+2. Configure the IBM Cloud provider in the main.tf file:
+
+```hcl
+provider "ibm" {
+  generation         = 2
+  ibmcloud_api_key   = var.ibmcloud_api_key
+}
+```
+
+3. Create a VPC and define the subnets for each availability zone:
+
+```hcl
+resource "ibm_is_vpc" "vpc" {
+  name = "openshift_vpc"
+}
+
+resource "ibm_is_subnet" "subnet_az1" {
+  name            = "subnet_az1"
+  vpc             = ibm_is_vpc.vpc.id
+  zone            = var.zones[0]
+  ipv4_cidr_block = "10.0.1.0/24"
+}
+
+resource "ibm_is_subnet" "subnet_az2" {
+  name            = "subnet_az2"
+  vpc             = ibm_is_vpc.vpc.id
+  zone            = var.zones[1]
+  ipv4_cidr_block = "10.0.2.0/24"
+}
+
+resource "ibm_is_subnet" "subnet_az3" {
+  name            = "subnet_az3"
+  vpc             = ibm_is_vpc.vpc.id
+  zone            = var.zones[2]
+  ipv4_cidr_block = "10.0.3.0/24"
+}
+```
+
+4. Create the OpenShift cluster with 12 ROCKs nodes distributed across the 3 availability zones:
+
+```hcl
+resource "ibm_container_vpc_cluster" "openshift_cluster" {
+  name              = "openshift_cluster"
+  vpc_id            = ibm_is_vpc.vpc.id
+  flavor            = "b3c.4x16" # ROCKs node flavor
+  worker_count      = 12
+  resource_group_id = data.ibm_resource_group.group.id
+  zones {
+    subnet_id = ibm_is_subnet.subnet_az1.id
+    name      = var.zones[0]
+  }
+  zones {
+    subnet_id = ibm_is_subnet.subnet_az2.id
+    name      = var.zones[1]
+  }
+  zones {
+    subnet_id = ibm_is_subnet.subnet_az3.id
+    name      = var.zones[2]
+  }
+}
+```
+
+5. Add the required variables in a variables.tf file:
+
+```hcl
+variable "ibmcloud_api_key" {
+  description = "IBM Cloud API key"
+}
+
+variable "zones" {
+  description = "List of availability zones"
+  default     = ["eu-gb-1", "eu-gb-2", "eu-gb-3"]
+}
+```
+
+6. Create a terraform.tfvars file to store your IBM Cloud API key:
+
+```hcl
+ibmcloud_api_key = "your_ibmcloud_api_key"
+```
+
+7. Initialize Terraform and apply the configuration:
+
+```sh
+terraform init
+terraform apply
+```
+
+This Terraform script will create an OpenShift cluster in IBM Cloud with 3 availability zones and 12 ROCKs nodes. 
+Make sure to replace "your_ibmcloud_api_key" with your actual API key.
+
+
+
+
+
+
+# To install the Tekton operator in your OpenShift cluster, follow these steps:
+
+1. Install the OpenShift CLI (oc) if you haven't already: https://docs.openshift.com/container-platform/4.8/cli_reference/openshift_cli/getting-started-cli.html
+
+2. Log in to your OpenShift cluster using the CLI. You can find the required command with the token in the IBM Cloud web console under your cluster details.
+
+3. Create a new project for the Tekton operator:
+
+```sh
+oc new-project tekton-pipelines
+```
+
+4. Apply the Tekton operator Custom Resource Definition (CRD) and the Tekton operator:
+
+```sh
+oc apply -f https://storage.googleapis.com/tekton-releases/operator/latest/release.notags.yaml
+```
+
+5. Create a TektonConfig Custom Resource (CR) to install Tekton components:
+
+```yaml
+# tektonconfig.yaml
+apiVersion: operator.tekton.dev/v1alpha1
+kind: TektonConfig
+metadata:
+  name: config
+spec:
+  profile: all
+```
+
+6. Apply the TektonConfig CR:
+
+```sh
+oc apply -f tektonconfig.yaml
+```
+
+This will install the Tekton operator and components in your OpenShift cluster. 
+Monitor the installation progress using `oc get pods -n tekton-pipelines --watch`.
+
+
+
+
+
+# Install the Tekton operator using a Kubernetes manifest file and the `kubernetes` provider:
+
+```hcl
+provider "kubernetes" {
+  host                   = ibm_container_vpc_cluster.openshift_cluster.config[0].host
+  cluster_ca_certificate = ibm_container_vpc_cluster.openshift_cluster.config[0].cluster_ca_certificate
+  token                  = ibm_container_vpc_cluster.openshift_cluster.config[0].admin_token
+}
+
+resource "kubernetes_namespace" "tekton" {
+  metadata {
+    name = "tekton-pipelines"
+  }
+}
+
+resource "kubernetes_manifest" "tekton_operator" {
+  manifest = file("tekton_operator.yaml")
+}
+```
+
+The `tekton_operator.yaml` file should contain the Tekton operator installation manifest, 
+which you can obtain from the Tekton project's GitHub repository.
+
+Remember to replace placeholder values with your actual data, and ensure you have the 
+required Terraform providers and modules installed. This outline should serve as a starting 
+point for your custom Terraform script, which you may need to adjust based on your specific requirements.
